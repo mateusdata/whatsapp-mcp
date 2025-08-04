@@ -1,0 +1,25 @@
+{
+  "name": "whatsapp-typescript-client",
+  "version": "1.0.0",
+  "description": "A single-file WhatsApp client with a REST API in TypeScript.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && node dist/index.js"
+  },
+  "author": "Gemini",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.19.2",
+    "knex": "^3.1.0",
+    "qrcode-terminal": "^0.12.0",
+    "sqlite3": "^5.1.7",
+    "whatsapp-web.js": "^1.23.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.12",
+    "@types/qrcode-terminal": "^0.12.2",
+    "typescript": "^5.4.5"
+  }
+}
