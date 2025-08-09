@@ -1,0 +1,8 @@
+services:
+  goapp:
+    image: golang:1.24
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: go run main.go
+    restart: always
