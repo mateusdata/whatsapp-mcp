@@ -5,4 +5,7 @@ services:
     volumes:
       - .:/app
     command: go run main.go
+    ports:
+        - "8080:8080"
+
     restart: always

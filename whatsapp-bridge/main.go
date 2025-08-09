@@ -31,7 +31,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-
 type Message struct {
 	Time      time.Time
 	Sender    string
@@ -41,25 +40,21 @@ type Message struct {
 	Filename  string
 }
 
-
 type MessageStore struct {
 	db *sql.DB
 }
 
-
 func NewMessageStore() (*MessageStore, error) {
-	
+
 	if err := os.MkdirAll("store", 0755); err != nil {
 		return nil, fmt.Errorf("failed to create store directory: %v", err)
 	}
 
-	
 	db, err := sql.Open("sqlite3", "file:store/messages.db?_foreign_keys=on")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open message database: %v", err)
 	}
 
-	
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS chats (
 			jid TEXT PRIMARY KEY,
@@ -93,11 +88,9 @@ func NewMessageStore() (*MessageStore, error) {
 	return &MessageStore{db: db}, nil
 }
 
-
 func (store *MessageStore) Close() error {
 	return store.db.Close()
 }
-
 
 func (store *MessageStore) StoreChat(jid, name string, lastMessageTime time.Time) error {
 	_, err := store.db.Exec(
@@ -107,10 +100,9 @@ func (store *MessageStore) StoreChat(jid, name string, lastMessageTime time.Time
 	return err
 }
 
-
 func (store *MessageStore) StoreMessage(id, chatJID, sender, content string, timestamp time.Time, isFromMe bool,
 	mediaType, filename, url string, mediaKey, fileSHA256, fileEncSHA256 []byte, fileLength uint64) error {
-	
+
 	if content == "" && mediaType == "" {
 		return nil
 	}
@@ -123,7 +115,6 @@ func (store *MessageStore) StoreMessage(id, chatJID, sender, content string, tim
 	)
 	return err
 }
-
 
 func (store *MessageStore) GetMessages(chatJID string, limit int) ([]Message, error) {
 	rows, err := store.db.Query(
@@ -150,7 +141,6 @@ func (store *MessageStore) GetMessages(chatJID string, limit int) ([]Message, er
 	return messages, nil
 }
 
-
 func (store *MessageStore) GetChats() (map[string]time.Time, error) {
 	rows, err := store.db.Query("SELECT jid, last_message_time FROM chats ORDER BY last_message_time DESC")
 	if err != nil {
@@ -172,29 +162,24 @@ func (store *MessageStore) GetChats() (map[string]time.Time, error) {
 	return chats, nil
 }
 
-
 func extractTextContent(msg *waProto.Message) string {
 	if msg == nil {
 		return ""
 	}
 
-	
 	if text := msg.GetConversation(); text != "" {
 		return text
 	} else if extendedText := msg.GetExtendedTextMessage(); extendedText != nil {
 		return extendedText.GetText()
 	}
 
-	
 	return ""
 }
-
 
 type SendMessageResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 }
-
 
 type SendMessageRequest struct {
 	Recipient string `json:"recipient"`
@@ -202,51 +187,45 @@ type SendMessageRequest struct {
 	MediaPath string `json:"media_path,omitempty"`
 }
 
-
 func sendWhatsAppMessage(client *whatsmeow.Client, recipient string, message string, mediaPath string) (bool, string) {
 	if !client.IsConnected() {
 		return false, "Not connected to WhatsApp"
 	}
 
-	
 	var recipientJID types.JID
 	var err error
 
-	
 	isJID := strings.Contains(recipient, "@")
 
 	if isJID {
-		
+
 		recipientJID, err = types.ParseJID(recipient)
 		if err != nil {
 			return false, fmt.Sprintf("Error parsing JID: %v", err)
 		}
 	} else {
-		
+
 		recipientJID = types.JID{
 			User:   recipient,
-			Server: "s.whatsapp.net", 
+			Server: "s.whatsapp.net",
 		}
 	}
 
 	msg := &waProto.Message{}
 
-	
 	if mediaPath != "" {
-		
+
 		mediaData, err := os.ReadFile(mediaPath)
 		if err != nil {
 			return false, fmt.Sprintf("Error reading media file: %v", err)
 		}
 
-		
 		fileExt := strings.ToLower(mediaPath[strings.LastIndex(mediaPath, ".")+1:])
 		var mediaType whatsmeow.MediaType
 		var mimeType string
 
-		
 		switch fileExt {
-		
+
 		case "jpg", "jpeg":
 			mediaType = whatsmeow.MediaImage
 			mimeType = "image/jpeg"
@@ -260,12 +239,10 @@ func sendWhatsAppMessage(client *whatsmeow.Client, recipient string, message str
 			mediaType = whatsmeow.MediaImage
 			mimeType = "image/webp"
 
-		
 		case "ogg":
 			mediaType = whatsmeow.MediaAudio
 			mimeType = "audio/ogg; codecs=opus"
 
-		
 		case "mp4":
 			mediaType = whatsmeow.MediaVideo
 			mimeType = "video/mp4"
@@ -276,13 +253,11 @@ func sendWhatsAppMessage(client *whatsmeow.Client, recipient string, message str
 			mediaType = whatsmeow.MediaVideo
 			mimeType = "video/quicktime"
 
-		
 		default:
 			mediaType = whatsmeow.MediaDocument
 			mimeType = "application/octet-stream"
 		}
 
-		
 		resp, err := client.Upload(context.Background(), mediaData, mediaType)
 		if err != nil {
 			return false, fmt.Sprintf("Error uploading media: %v", err)
@@ -290,7 +265,6 @@ func sendWhatsAppMessage(client *whatsmeow.Client, recipient string, message str
 
 		fmt.Println("Media uploaded", resp)
 
-		
 		switch mediaType {
 		case whatsmeow.MediaImage:
 			msg.ImageMessage = &waProto.ImageMessage{
@@ -304,11 +278,10 @@ func sendWhatsAppMessage(client *whatsmeow.Client, recipient string, message str
 				FileLength:    &resp.FileLength,
 			}
 		case whatsmeow.MediaAudio:
-			
-			var seconds uint32 = 30 
+
+			var seconds uint32 = 30
 			var waveform []byte = nil
 
-			
 			if strings.Contains(mimeType, "ogg") {
 				analyzedSeconds, analyzedWaveform, err := analyzeOggOpus(mediaData)
 				if err == nil {
@@ -361,7 +334,6 @@ func sendWhatsAppMessage(client *whatsmeow.Client, recipient string, message str
 		msg.Conversation = proto.String(message)
 	}
 
-	
 	_, err = client.SendMessage(context.Background(), recipientJID, msg)
 
 	if err != nil {
@@ -371,31 +343,26 @@ func sendWhatsAppMessage(client *whatsmeow.Client, recipient string, message str
 	return true, fmt.Sprintf("Message sent to %s", recipient)
 }
 
-
 func extractMediaInfo(msg *waProto.Message) (mediaType string, filename string, url string, mediaKey []byte, fileSHA256 []byte, fileEncSHA256 []byte, fileLength uint64) {
 	if msg == nil {
 		return "", "", "", nil, nil, nil, 0
 	}
 
-	
 	if img := msg.GetImageMessage(); img != nil {
 		return "image", "image_" + time.Now().Format("20060102_150405") + ".jpg",
 			img.GetURL(), img.GetMediaKey(), img.GetFileSHA256(), img.GetFileEncSHA256(), img.GetFileLength()
 	}
 
-	
 	if vid := msg.GetVideoMessage(); vid != nil {
 		return "video", "video_" + time.Now().Format("20060102_150405") + ".mp4",
 			vid.GetURL(), vid.GetMediaKey(), vid.GetFileSHA256(), vid.GetFileEncSHA256(), vid.GetFileLength()
 	}
 
-	
 	if aud := msg.GetAudioMessage(); aud != nil {
 		return "audio", "audio_" + time.Now().Format("20060102_150405") + ".ogg",
 			aud.GetURL(), aud.GetMediaKey(), aud.GetFileSHA256(), aud.GetFileEncSHA256(), aud.GetFileLength()
 	}
 
-	
 	if doc := msg.GetDocumentMessage(); doc != nil {
 		filename := doc.GetFileName()
 		if filename == "" {
@@ -408,33 +375,26 @@ func extractMediaInfo(msg *waProto.Message) (mediaType string, filename string, 
 	return "", "", "", nil, nil, nil, 0
 }
 
-
 func handleMessage(client *whatsmeow.Client, messageStore *MessageStore, msg *events.Message, logger waLog.Logger) {
-	
+
 	chatJID := msg.Info.Chat.String()
 	sender := msg.Info.Sender.User
 
-	
 	name := GetChatName(client, messageStore, msg.Info.Chat, chatJID, nil, sender, logger)
 
-	
 	err := messageStore.StoreChat(chatJID, name, msg.Info.Timestamp)
 	if err != nil {
 		logger.Warnf("Failed to store chat: %v", err)
 	}
 
-	
 	content := extractTextContent(msg.Message)
 
-	
 	mediaType, filename, url, mediaKey, fileSHA256, fileEncSHA256, fileLength := extractMediaInfo(msg.Message)
 
-	
 	if content == "" && mediaType == "" {
 		return
 	}
 
-	
 	err = messageStore.StoreMessage(
 		msg.Info.ID,
 		chatJID,
@@ -454,14 +414,13 @@ func handleMessage(client *whatsmeow.Client, messageStore *MessageStore, msg *ev
 	if err != nil {
 		logger.Warnf("Failed to store message: %v", err)
 	} else {
-		
+
 		timestamp := msg.Info.Timestamp.Format("2006-01-02 15:04:05")
 		direction := "←"
 		if msg.Info.IsFromMe {
 			direction = "→"
 		}
 
-		
 		if mediaType != "" {
 			fmt.Printf("[%s] %s %s: [%s: %s] %s\n", timestamp, direction, sender, mediaType, filename, content)
 		} else if content != "" {
@@ -470,12 +429,10 @@ func handleMessage(client *whatsmeow.Client, messageStore *MessageStore, msg *ev
 	}
 }
 
-
 type DownloadMediaRequest struct {
 	MessageID string `json:"message_id"`
 	ChatJID   string `json:"chat_jid"`
 }
-
 
 type DownloadMediaResponse struct {
 	Success  bool   `json:"success"`
@@ -484,7 +441,6 @@ type DownloadMediaResponse struct {
 	Path     string `json:"path,omitempty"`
 }
 
-
 func (store *MessageStore) StoreMediaInfo(id, chatJID, url string, mediaKey, fileSHA256, fileEncSHA256 []byte, fileLength uint64) error {
 	_, err := store.db.Exec(
 		"UPDATE messages SET url = ?, media_key = ?, file_sha256 = ?, file_enc_sha256 = ?, file_length = ? WHERE id = ? AND chat_jid = ?",
@@ -492,7 +448,6 @@ func (store *MessageStore) StoreMediaInfo(id, chatJID, url string, mediaKey, fil
 	)
 	return err
 }
-
 
 func (store *MessageStore) GetMediaInfo(id, chatJID string) (string, string, string, []byte, []byte, []byte, uint64, error) {
 	var mediaType, filename, url string
@@ -507,7 +462,6 @@ func (store *MessageStore) GetMediaInfo(id, chatJID string) (string, string, str
 	return mediaType, filename, url, mediaKey, fileSHA256, fileEncSHA256, fileLength, err
 }
 
-
 type MediaDownloader struct {
 	URL           string
 	DirectPath    string
@@ -518,58 +472,48 @@ type MediaDownloader struct {
 	MediaType     whatsmeow.MediaType
 }
 
-
 func (d *MediaDownloader) GetDirectPath() string {
 	return d.DirectPath
 }
-
 
 func (d *MediaDownloader) GetURL() string {
 	return d.URL
 }
 
-
 func (d *MediaDownloader) GetMediaKey() []byte {
 	return d.MediaKey
 }
-
 
 func (d *MediaDownloader) GetFileLength() uint64 {
 	return d.FileLength
 }
 
-
 func (d *MediaDownloader) GetFileSHA256() []byte {
 	return d.FileSHA256
 }
-
 
 func (d *MediaDownloader) GetFileEncSHA256() []byte {
 	return d.FileEncSHA256
 }
 
-
 func (d *MediaDownloader) GetMediaType() whatsmeow.MediaType {
 	return d.MediaType
 }
 
-
 func downloadMedia(client *whatsmeow.Client, messageStore *MessageStore, messageID, chatJID string) (bool, string, string, string, error) {
-	
+
 	var mediaType, filename, url string
 	var mediaKey, fileSHA256, fileEncSHA256 []byte
 	var fileLength uint64
 	var err error
 
-	
 	chatDir := fmt.Sprintf("store/%s", strings.ReplaceAll(chatJID, ":", "_"))
 	localPath := ""
 
-	
 	mediaType, filename, url, mediaKey, fileSHA256, fileEncSHA256, fileLength, err = messageStore.GetMediaInfo(messageID, chatJID)
 
 	if err != nil {
-		
+
 		err = messageStore.db.QueryRow(
 			"SELECT media_type, filename FROM messages WHERE id = ? AND chat_jid = ?",
 			messageID, chatJID,
@@ -580,42 +524,34 @@ func downloadMedia(client *whatsmeow.Client, messageStore *MessageStore, message
 		}
 	}
 
-	
 	if mediaType == "" {
 		return false, "", "", "", fmt.Errorf("not a media message")
 	}
 
-	
 	if err := os.MkdirAll(chatDir, 0755); err != nil {
 		return false, "", "", "", fmt.Errorf("failed to create chat directory: %v", err)
 	}
 
-	
 	localPath = fmt.Sprintf("%s/%s", chatDir, filename)
 
-	
 	absPath, err := filepath.Abs(localPath)
 	if err != nil {
 		return false, "", "", "", fmt.Errorf("failed to get absolute path: %v", err)
 	}
 
-	
 	if _, err := os.Stat(localPath); err == nil {
-		
+
 		return true, mediaType, filename, absPath, nil
 	}
 
-	
 	if url == "" || len(mediaKey) == 0 || len(fileSHA256) == 0 || len(fileEncSHA256) == 0 || fileLength == 0 {
 		return false, "", "", "", fmt.Errorf("incomplete media information for download")
 	}
 
 	fmt.Printf("Attempting to download media for message %s in chat %s...\n", messageID, chatJID)
 
-	
 	directPath := extractDirectPathFromURL(url)
 
-	
 	var waMediaType whatsmeow.MediaType
 	switch mediaType {
 	case "image":
@@ -640,13 +576,11 @@ func downloadMedia(client *whatsmeow.Client, messageStore *MessageStore, message
 		MediaType:     waMediaType,
 	}
 
-	
 	mediaData, err := client.Download(context.Background(), downloader)
 	if err != nil {
 		return false, "", "", "", fmt.Errorf("failed to download media: %v", err)
 	}
 
-	
 	if err := os.WriteFile(localPath, mediaData, 0644); err != nil {
 		return false, "", "", "", fmt.Errorf("failed to save media file: %v", err)
 	}
@@ -655,44 +589,40 @@ func downloadMedia(client *whatsmeow.Client, messageStore *MessageStore, message
 	return true, mediaType, filename, absPath, nil
 }
 
-
 func extractDirectPathFromURL(url string) string {
-	
-	
 
-	
 	parts := strings.SplitN(url, ".net/", 2)
 	if len(parts) < 2 {
-		return url 
+		return url
 	}
 
 	pathPart := parts[1]
 
-	
 	pathPart = strings.SplitN(pathPart, "?", 2)[0]
 
-	
 	return "/" + pathPart
 }
 
-
 func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port int) {
-	
+
+	http.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"api": "Api is rune"})
+	})
+
 	http.HandleFunc("/api/send", func(w http.ResponseWriter, r *http.Request) {
-		
+
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
-		
 		var req SendMessageRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Invalid request format", http.StatusBadRequest)
 			return
 		}
 
-		
 		if req.Recipient == "" {
 			http.Error(w, "Recipient is required", http.StatusBadRequest)
 			return
@@ -705,52 +635,43 @@ func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port 
 
 		fmt.Println("Received request to send message", req.Message, req.MediaPath)
 
-		
 		success, message := sendWhatsAppMessage(client, req.Recipient, req.Message, req.MediaPath)
 		fmt.Println("Message sent", success, message)
-		
+
 		w.Header().Set("Content-Type", "application/json")
 
-		
 		if !success {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 
-		
 		json.NewEncoder(w).Encode(SendMessageResponse{
 			Success: success,
 			Message: message,
 		})
 	})
 
-	
 	http.HandleFunc("/api/download", func(w http.ResponseWriter, r *http.Request) {
-		
+
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
-		
 		var req DownloadMediaRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Invalid request format", http.StatusBadRequest)
 			return
 		}
 
-		
 		if req.MessageID == "" || req.ChatJID == "" {
 			http.Error(w, "Message ID and Chat JID are required", http.StatusBadRequest)
 			return
 		}
 
-		
 		success, mediaType, filename, path, err := downloadMedia(client, messageStore, req.MessageID, req.ChatJID)
 
-		
 		w.Header().Set("Content-Type", "application/json")
 
-		
 		if !success || err != nil {
 			errMsg := "Unknown error"
 			if err != nil {
@@ -765,7 +686,6 @@ func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port 
 			return
 		}
 
-		
 		json.NewEncoder(w).Encode(DownloadMediaResponse{
 			Success:  true,
 			Message:  fmt.Sprintf("Successfully downloaded %s media", mediaType),
@@ -774,11 +694,9 @@ func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port 
 		})
 	})
 
-	
 	serverAddr := fmt.Sprintf(":%d", port)
 	fmt.Printf("Starting REST API server on %s...\n", serverAddr)
 
-	
 	go func() {
 		if err := http.ListenAndServe(serverAddr, nil); err != nil {
 			fmt.Printf("REST API server error: %v\n", err)
@@ -787,14 +705,12 @@ func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port 
 }
 
 func main() {
-	
+
 	logger := waLog.Stdout("Client", "INFO", true)
 	logger.Infof("Starting WhatsApp client...")
 
-	
 	dbLog := waLog.Stdout("Database", "INFO", true)
 
-	
 	if err := os.MkdirAll("store", 0755); err != nil {
 		logger.Errorf("Failed to create store directory: %v", err)
 		return
@@ -806,11 +722,10 @@ func main() {
 		return
 	}
 
-	
 	deviceStore, err := container.GetFirstDevice(context.Background())
 	if err != nil {
 		if err == sql.ErrNoRows {
-			
+
 			deviceStore = container.NewDevice()
 			logger.Infof("Created new device")
 		} else {
@@ -819,14 +734,12 @@ func main() {
 		}
 	}
 
-	
 	client := whatsmeow.NewClient(deviceStore, logger)
 	if client == nil {
 		logger.Errorf("Failed to create WhatsApp client")
 		return
 	}
 
-	
 	messageStore, err := NewMessageStore()
 	if err != nil {
 		logger.Errorf("Failed to initialize message store: %v", err)
@@ -834,15 +747,14 @@ func main() {
 	}
 	defer messageStore.Close()
 
-	
 	client.AddEventHandler(func(evt interface{}) {
 		switch v := evt.(type) {
 		case *events.Message:
-			
+
 			handleMessage(client, messageStore, v, logger)
 
 		case *events.HistorySync:
-			
+
 			handleHistorySync(client, messageStore, v, logger)
 
 		case *events.Connected:
@@ -853,12 +765,10 @@ func main() {
 		}
 	})
 
-	
 	connected := make(chan bool, 1)
 
-	
 	if client.Store.ID == nil {
-		
+
 		qrChan, _ := client.GetQRChannel(context.Background())
 		err = client.Connect()
 		if err != nil {
@@ -866,7 +776,6 @@ func main() {
 			return
 		}
 
-		
 		for evt := range qrChan {
 			if evt.Event == "code" {
 				fmt.Println("\nScan this QR code with your WhatsApp app:")
@@ -877,7 +786,6 @@ func main() {
 			}
 		}
 
-		
 		select {
 		case <-connected:
 			fmt.Println("\nSuccessfully connected and authenticated!")
@@ -886,7 +794,7 @@ func main() {
 			return
 		}
 	} else {
-		
+
 		err = client.Connect()
 		if err != nil {
 			logger.Errorf("Failed to connect: %v", err)
@@ -895,7 +803,6 @@ func main() {
 		connected <- true
 	}
 
-	
 	time.Sleep(2 * time.Second)
 
 	if !client.IsConnected() {
@@ -905,65 +812,55 @@ func main() {
 
 	fmt.Println("\n✓ Connected to WhatsApp! Type 'help' for commands.")
 
-	
 	startRESTServer(client, messageStore, 8080)
 
-	
 	exitChan := make(chan os.Signal, 1)
 	signal.Notify(exitChan, syscall.SIGINT, syscall.SIGTERM)
 
 	fmt.Println("REST server is running. Press Ctrl+C to disconnect and exit.")
 
-	
 	<-exitChan
 
 	fmt.Println("Disconnecting...")
-	
+
 	client.Disconnect()
 }
 
-
 func GetChatName(client *whatsmeow.Client, messageStore *MessageStore, jid types.JID, chatJID string, conversation interface{}, sender string, logger waLog.Logger) string {
-	
+
 	var existingName string
 	err := messageStore.db.QueryRow("SELECT name FROM chats WHERE jid = ?", chatJID).Scan(&existingName)
 	if err == nil && existingName != "" {
-		
+
 		logger.Infof("Using existing chat name for %s: %s", chatJID, existingName)
 		return existingName
 	}
 
-	
 	var name string
 
 	if jid.Server == "g.us" {
-		
+
 		logger.Infof("Getting name for group: %s", chatJID)
 
-		
 		if conversation != nil {
-			
-			
+
 			var displayName, convName *string
-			
+
 			v := reflect.ValueOf(conversation)
 			if v.Kind() == reflect.Ptr && !v.IsNil() {
 				v = v.Elem()
 
-				
 				if displayNameField := v.FieldByName("DisplayName"); displayNameField.IsValid() && displayNameField.Kind() == reflect.Ptr && !displayNameField.IsNil() {
 					dn := displayNameField.Elem().String()
 					displayName = &dn
 				}
 
-				
 				if nameField := v.FieldByName("Name"); nameField.IsValid() && nameField.Kind() == reflect.Ptr && !nameField.IsNil() {
 					n := nameField.Elem().String()
 					convName = &n
 				}
 			}
 
-			
 			if displayName != nil && *displayName != "" {
 				name = *displayName
 			} else if convName != nil && *convName != "" {
@@ -971,31 +868,29 @@ func GetChatName(client *whatsmeow.Client, messageStore *MessageStore, jid types
 			}
 		}
 
-		
 		if name == "" {
 			groupInfo, err := client.GetGroupInfo(jid)
 			if err == nil && groupInfo.Name != "" {
 				name = groupInfo.Name
 			} else {
-				
+
 				name = fmt.Sprintf("Group %s", jid.User)
 			}
 		}
 
 		logger.Infof("Using group name: %s", name)
 	} else {
-		
+
 		logger.Infof("Getting name for contact: %s", chatJID)
 
-		
 		contact, err := client.Store.Contacts.GetContact(context.Background(), jid)
 		if err == nil && contact.FullName != "" {
 			name = contact.FullName
 		} else if sender != "" {
-			
+
 			name = sender
 		} else {
-			
+
 			name = jid.User
 		}
 
@@ -1005,39 +900,34 @@ func GetChatName(client *whatsmeow.Client, messageStore *MessageStore, jid types
 	return name
 }
 
-
 func handleHistorySync(client *whatsmeow.Client, messageStore *MessageStore, historySync *events.HistorySync, logger waLog.Logger) {
 	fmt.Printf("Received history sync event with %d conversations\n", len(historySync.Data.Conversations))
 
 	syncedCount := 0
 	for _, conversation := range historySync.Data.Conversations {
-		
+
 		if conversation.ID == nil {
 			continue
 		}
 
 		chatJID := *conversation.ID
 
-		
 		jid, err := types.ParseJID(chatJID)
 		if err != nil {
 			logger.Warnf("Failed to parse JID %s: %v", chatJID, err)
 			continue
 		}
 
-		
 		name := GetChatName(client, messageStore, jid, chatJID, conversation, "", logger)
 
-		
 		messages := conversation.Messages
 		if len(messages) > 0 {
-			
+
 			latestMsg := messages[0]
 			if latestMsg == nil || latestMsg.Message == nil {
 				continue
 			}
 
-			
 			timestamp := time.Time{}
 			if ts := latestMsg.Message.GetMessageTimestamp(); ts != 0 {
 				timestamp = time.Unix(int64(ts), 0)
@@ -1047,13 +937,11 @@ func handleHistorySync(client *whatsmeow.Client, messageStore *MessageStore, his
 
 			messageStore.StoreChat(chatJID, name, timestamp)
 
-			
 			for _, msg := range messages {
 				if msg == nil || msg.Message == nil {
 					continue
 				}
 
-				
 				var content string
 				if msg.Message.Message != nil {
 					if conv := msg.Message.Message.GetConversation(); conv != "" {
@@ -1063,7 +951,6 @@ func handleHistorySync(client *whatsmeow.Client, messageStore *MessageStore, his
 					}
 				}
 
-				
 				var mediaType, filename, url string
 				var mediaKey, fileSHA256, fileEncSHA256 []byte
 				var fileLength uint64
@@ -1072,15 +959,12 @@ func handleHistorySync(client *whatsmeow.Client, messageStore *MessageStore, his
 					mediaType, filename, url, mediaKey, fileSHA256, fileEncSHA256, fileLength = extractMediaInfo(msg.Message.Message)
 				}
 
-				
 				logger.Infof("Message content: %v, Media Type: %v", content, mediaType)
 
-				
 				if content == "" && mediaType == "" {
 					continue
 				}
 
-				
 				var sender string
 				isFromMe := false
 				if msg.Message.Key != nil {
@@ -1098,13 +982,11 @@ func handleHistorySync(client *whatsmeow.Client, messageStore *MessageStore, his
 					sender = jid.User
 				}
 
-				
 				msgID := ""
 				if msg.Message.Key != nil && msg.Message.Key.ID != nil {
 					msgID = *msg.Message.Key.ID
 				}
 
-				
 				timestamp := time.Time{}
 				if ts := msg.Message.GetMessageTimestamp(); ts != 0 {
 					timestamp = time.Unix(int64(ts), 0)
@@ -1131,7 +1013,7 @@ func handleHistorySync(client *whatsmeow.Client, messageStore *MessageStore, his
 					logger.Warnf("Failed to store history message: %v", err)
 				} else {
 					syncedCount++
-					
+
 					if mediaType != "" {
 						logger.Infof("Stored message: [%s] %s -> %s: [%s: %s] %s",
 							timestamp.Format("2006-01-02 15:04:05"), sender, chatJID, mediaType, filename, content)
@@ -1146,7 +1028,6 @@ func handleHistorySync(client *whatsmeow.Client, messageStore *MessageStore, his
 
 	fmt.Printf("History sync complete. Stored %d messages.\n", syncedCount)
 }
-
 
 func requestHistorySync(client *whatsmeow.Client) {
 	if client == nil {
@@ -1164,7 +1045,6 @@ func requestHistorySync(client *whatsmeow.Client) {
 		return
 	}
 
-	
 	historyMsg := client.BuildHistorySyncRequest(nil, 100)
 	if historyMsg == nil {
 		fmt.Println("Failed to build history sync request.")
@@ -1183,61 +1063,51 @@ func requestHistorySync(client *whatsmeow.Client) {
 	}
 }
 
-
 func analyzeOggOpus(data []byte) (duration uint32, waveform []byte, err error) {
-	
-	
+
 	if len(data) < 4 || string(data[0:4]) != "OggS" {
 		return 0, nil, fmt.Errorf("not a valid Ogg file (missing OggS signature)")
 	}
 
-	
 	var lastGranule uint64
-	var sampleRate uint32 = 48000 
+	var sampleRate uint32 = 48000
 	var preSkip uint16 = 0
 	var foundOpusHead bool
 
-	
 	for i := 0; i < len(data); {
-		
+
 		if i+27 >= len(data) {
 			break
 		}
 
-		
 		if string(data[i:i+4]) != "OggS" {
-			
+
 			i++
 			continue
 		}
 
-		
 		granulePos := binary.LittleEndian.Uint64(data[i+6 : i+14])
 		pageSeqNum := binary.LittleEndian.Uint32(data[i+18 : i+22])
 		numSegments := int(data[i+26])
 
-		
 		if i+27+numSegments >= len(data) {
 			break
 		}
 		segmentTable := data[i+27 : i+27+numSegments]
 
-		
 		pageSize := 27 + numSegments
 		for _, segLen := range segmentTable {
 			pageSize += int(segLen)
 		}
 
-		
 		if !foundOpusHead && pageSeqNum <= 1 {
-			
+
 			pageData := data[i : i+pageSize]
 			headPos := bytes.Index(pageData, []byte("OpusHead"))
 			if headPos >= 0 && headPos+12 < len(pageData) {
-				
-				
-				headPos += 8 
-				
+
+				headPos += 8
+
 				if headPos+12 <= len(pageData) {
 					preSkip = binary.LittleEndian.Uint16(pageData[headPos+10 : headPos+12])
 					sampleRate = binary.LittleEndian.Uint32(pageData[headPos+12 : headPos+16])
@@ -1247,12 +1117,10 @@ func analyzeOggOpus(data []byte) (duration uint32, waveform []byte, err error) {
 			}
 		}
 
-		
 		if granulePos != 0 {
 			lastGranule = granulePos
 		}
 
-		
 		i += pageSize
 	}
 
@@ -1260,28 +1128,25 @@ func analyzeOggOpus(data []byte) (duration uint32, waveform []byte, err error) {
 		fmt.Println("Warning: OpusHead not found, using default values")
 	}
 
-	
 	if lastGranule > 0 {
-		
+
 		durationSeconds := float64(lastGranule-uint64(preSkip)) / float64(sampleRate)
 		duration = uint32(math.Ceil(durationSeconds))
 		fmt.Printf("Calculated Opus duration from granule: %f seconds (lastGranule=%d)\n",
 			durationSeconds, lastGranule)
 	} else {
-		
+
 		fmt.Println("Warning: No valid granule position found, using estimation")
-		durationEstimate := float64(len(data)) / 2000.0 
+		durationEstimate := float64(len(data)) / 2000.0
 		duration = uint32(durationEstimate)
 	}
 
-	
 	if duration < 1 {
 		duration = 1
 	} else if duration > 300 {
 		duration = 300
 	}
 
-	
 	waveform = placeholderWaveform(duration)
 
 	fmt.Printf("Ogg Opus analysis: size=%d bytes, calculated duration=%d sec, waveform=%d bytes\n",
@@ -1290,7 +1155,6 @@ func analyzeOggOpus(data []byte) (duration uint32, waveform []byte, err error) {
 	return duration, waveform, nil
 }
 
-
 func min(x, y int) int {
 	if x < y {
 		return x
@@ -1298,39 +1162,30 @@ func min(x, y int) int {
 	return y
 }
 
-
-
 func placeholderWaveform(duration uint32) []byte {
-	
+
 	const waveformLength = 64
 	waveform := make([]byte, waveformLength)
 
-	
 	rand.Seed(int64(duration))
-	
+
 	baseAmplitude := 35.0
 	frequencyFactor := float64(min(int(duration), 120)) / 30.0
 
 	for i := range waveform {
-		
+
 		pos := float64(i) / float64(waveformLength)
 
-		
-		
 		val := baseAmplitude * math.Sin(pos*math.Pi*frequencyFactor*8)
 		val += (baseAmplitude / 2) * math.Sin(pos*math.Pi*frequencyFactor*16)
 
-		
 		val += (rand.Float64() - 0.5) * 15
 
-		
 		fadeInOut := math.Sin(pos * math.Pi)
 		val = val * (0.7 + 0.3*fadeInOut)
 
-		
 		val = val + 50
 
-		
 		if val < 0 {
 			val = 0
 		} else if val > 100 {
